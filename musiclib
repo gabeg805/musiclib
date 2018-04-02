@@ -341,7 +341,6 @@ youtube_download()
     local artist="$(get_artist "${query}")"
     local song="$(get_song "${query}")"
 
-    echo "Downloading..."
     echo "Artist : ${artist}"
     echo "Song   : ${song}"
 
@@ -359,8 +358,8 @@ youtube_download()
     local title=$(echo "${result}" | cut -f 1 -d ';')
     local href=$(echo "${result}" | cut -f 2 -d ';')
 
-    youtube-dl-mp3 --no-playlist -x --audio-format mp3 "${YOUTUBE}${href}" \
-                   > /dev/null
+    echo "Downloading..."
+    youtube-dl-mp3 --no-playlist -x --audio-format mp3 "${YOUTUBE}${href}"
 
     # Rename the song to the appropriate name
     if [ -n "${title}" ]; then
@@ -408,12 +407,12 @@ get_search_result()
     # Populate list of all hrefs in search page
     for line in $(grep 'href="/watch?v=' "${RESULTPAGE}" | grep 'title='); do
         ref=$(get_search_result_href "${line}")
-        allref+=("${ref}")
 
         # Do something with the title
         if [ "${ref/list=}" == "${ref}" ]; then
             title=$(get_search_result_title "${line}")
             alltitle+=("${title}")
+            allref+=("${ref}")
 
             # Stop after one search if prompt not specified
             if [ -z "${PROMPTRESULTS}" ]; then
