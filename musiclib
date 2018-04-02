@@ -17,8 +17,10 @@
 # Globals
 PROGRAM="${0##*/}"
 PROGDIR=$(dirname "$(readlink -f "${0}")")
-LIBDIR="${HOME}/share/music/.library"
-LIBFILE="${LIBDIR}/library.txt"
+PROGSHAREDIR="${HOME}/.local/share/${PROGRAM}"
+PLAYLISTDIR="${PROGSHAREDIR}/playlist"
+LIBRARYDIR="${PROGSHAREDIR}/library"
+LIBRARYFILE="${LIBRARYDIR}/library.txt"
 YOUTUBE="https://www.youtube.com"
 RESULTPAGE="result.html"
 
@@ -32,115 +34,88 @@ PROMPTRESULTS=
 # Source utility
 . "${PROGDIR}/../lib/bash/util.sh"
 
-# ------------------------------------------------------------------------------
-# Main
+##
+# Music Library
+#
 main()
 {
-    # Setup options
-    if [ $# -eq 0 ]; then
-        usage
-        exit 0
-    fi
-    short="hvSdflq:ipt"
-    long="help,verbose,sync,download,find,list,query:,ignore-official,prompt-results,test"
-    args=$(getopt -o "${short}" --long "${long}" --name "${PROGRAM}" -- "${@}")
-    if [ $? -ne 0 ]; then
-        usage
-        exit 1
-    fi
-    eval set -- "${args}"
+    cli_options "-h | --help            | Print program usage." \
+                "-v | --verbose         | Verbose output." \
+                "-S | --sync            | Sync music library." \
+                "-d | --download        | Download music." \
+                "-f | --find            | Find music in the library." \
+                "-l | --list            | List music in the library. If used along with '-q', then query is case sensitive." \
+                "-q | --query | search: | Search query for '-d', '-f', and '-l'. For multiple queries, use this option more than once." \
+                "-i | --ignore-official | The default behaviour is to append 'official' to the '-S' search string, in order to find official music audio. This flag ignores this default behaviour." \
+                "-p | --prompt-results  | Prompt the user to select a video, whose audio will be downloaded." \
+                "   | --test            | Test out a '--sync' but do not create any artist directories, or download any songs."
+    cli_parse "${@}"
 
-    # Define options
-    local PARSED=
-    local DOWNLOAD=
-    local FIND=
-    local LIST=
-    local QUERY=()
+    # local short="hvSdflq:ipt"
+    # local long="help,verbose,sync,download,find,list,query:,ignore-official,prompt-results,test"
+    # parse_options "${PROGRAM}" "${short}" "${long}" "${@}"
 
-    # Parse options
-    while true; do
-        case "${1}" in
-            # Usage
-            -h|--help)
-                usage
-                exit 0
-                ;;
+    # local DOWNLOAD=
+    # local FIND=
+    # local LIST=
+    # local QUERY=()
+    # while true
+    # do
+    #     case "${1}" in
+    #         -h|--help)
+    #             usage
+    #             exit 0
+    #             ;;
+    #         -v|--verbose)
+    #             VERBOSE=true
+    #             ;;
+    #         -S|--sync)
+    #             SYNC=true
+    #             ;;
+    #         -d|--download)
+    #             DOWNLOAD=true
+    #             ;;
+    #         -f|--find)
+    #             FIND=true
+    #             ;;
+    #         -l|--list)
+    #             LIST=true
+    #             ;;
+    #         -q|--query)
+    #             shift
+    #             QUERY+=("${1}")
+    #             ;;
+    #         -i,--ignore-official)
+    #             IGNOREOFFICIAL=
+    #             ;;
+    #         -p|--prompt-results)
+    #             PROMPTRESULTS=true
+    #             ;;
+    #         --test)
+    #             TEST=true
+    #             ;;
+    #         --)
+    #             break
+    #             ;;
+    #         *)
+    #             exit ${EARG}
+    #             ;;
+    #     esac
+    #     shift
+    # done
 
-            # Verbose output
-            -v|--verbose)
-                VERBOSE=true
-                ;;
-
-            # Sync library to the library config file
-            -S|--sync)
-                SYNC=true
-                ;;
-
-            # Download the desired query
-            -d|--download)
-                DOWNLOAD=true
-                ;;
-
-            # Find the desired query in the library
-            -f|--find)
-                FIND=true
-                ;;
-
-            # List contents of library. If query is specified, list the matches
-            -l|--list)
-                LIST=true
-                ;;
-
-            # Query
-            -q|--query)
-                shift
-                QUERY+=("${1}")
-                ;;
-
-            # Official flag
-            -i,--ignore-official)
-                IGNOREOFFICIAL=true;
-                ;;
-
-            # Prompt user when displays results
-            -p|--prompt-results)
-                shift
-                PROMPTRESULTS=true
-                ;;
-
-            # Test flag
-            --test)
-                TEST=true
-                ;;
-
-            # End of options
-            --)
-                break
-                ;;
-
-            *)
-                break
-                ;;
-        esac
-        shift
-        PARSED=true
-    done
-
-    # Run options
-    if [ -z "${PARSED}" ]; then
-        print_err "No options specified. See '--help' for more information."
-        exit ${EARG}
-    elif [ -n "${SYNC}" ]; then
-        sync_music_library
-    elif [ -n "${DOWNLOAD}" ]; then
-        download_music "${QUERY[@]}"
-    elif [ -n "${FIND}" ]; then
-        find_music_in_library "${QUERY[@]}"
-    elif [ -n "${LIST}" ]; then
-        list_music_library "${QUERY[@]}"
-    else
-        exit ${EARG}
-    fi
+    # # Run options
+    # if [ -n "${SYNC}" ]; then
+    #     sync_music_library
+    # elif [ -n "${DOWNLOAD}" ]; then
+    #     download_music "${QUERY[@]}"
+    # elif [ -n "${FIND}" ]; then
+    #     find_music_in_library "${QUERY[@]}"
+    # elif [ -n "${LIST}" ]; then
+    #     list_music_library "${QUERY[@]}"
+    # else
+    #     exit ${EARG}
+    # fi
 }
 
 # ------------------------------------------------------------------------------
@@ -194,6 +169,48 @@ usage()
     echo "        Resut number to use [Default: 1]."
 }
 
+##
+# Install playlist and library configuration files under user's home
+#
+install()
+{
+    local playlist=
+    local library=
+
+    print_info "Creating local directory in home."
+    mkdir -pv "${PROGSHAREDIR}"
+
+    echo "Where are your music playlists located?"
+    read -p "> " playlist
+    if [ ! -d "${playlist}" ]
+    then
+        print_err "Directory '${playlist}' does not exist."
+        return 1
+    else
+        print_info "Saving music playlist location."
+        ln -sv "${playlist}" "${PLAYLISTDIR}"
+    fi
+
+    echo "Where is your music library located?"
+    read -p "> " library
+    if [ ! -d "${library}" ]; then 
+        print_err "Directory '${library}' does not exist."
+        return 2
+    else
+        print_info "Saving music library location."
+        ln -sv "${library}" "${LIBRARYDIR}"
+    fi
+}
+
+##
+# Uninstall configuration files under user's home
+#
+uninstall()
+{
+    print_info "Uninstalling Music On Console Wrapper."
+    rm -rfv "${PROGSHAREDIR}"
+}
+
 # ------------------------------------------------------------------------------
 # Sync music library
 sync_music_library()
@@ -206,7 +223,7 @@ sync_music_library()
         fi
 
         download_music "${line}"
-    done < "${LIBFILE}"
+    done < "${LIBRARYFILE}"
 }
 
 # ------------------------------------------------------------------------------
@@ -223,7 +240,7 @@ download_music()
     local song=
 
     for q in "${queries[@]}"; do
-        builtin cd "${LIBDIR}"
+        builtin cd "${LIBRARYDIR}"
 
         artist="$(get_artist "${q}")"
         song="$(get_song "${q}")"
@@ -253,7 +270,7 @@ find_music_in_library()
         exit 1
     fi
 
-    builtin cd "${LIBDIR}"
+    builtin cd "${LIBRARYDIR}"
 
     local queries=("${@}")
     local artist=
@@ -308,7 +325,7 @@ list_music_library()
 
     # List library
     for q in "${queries[@]}"; do
-        builtin cd "${LIBDIR}"
+        builtin cd "${LIBRARYDIR}"
 
         # Check if artist dir and song file exist
         if [ ! -d "${q}" ]; then
@@ -479,19 +496,19 @@ check_music_library()
         song=$(get_song "${line}")
 
         # Check for existence of artist directory
-        if [ ! -d "${LIBDIR}/${artist}" ]; then
+        if [ ! -d "${LIBRARYDIR}/${artist}" ]; then
             print_warn "Unable to find artist '${artist}' for song '${song}'."
             continue
         fi
 
         # Check for existence of song file
-        if [ ! -f "${LIBDIR}/${artist}/${line}" -o ! -f "${LIBDIR}/${artist}/${song}" ]; then
+        if [ ! -f "${LIBRARYDIR}/${artist}/${line}" -o ! -f "${LIBRARYDIR}/${artist}/${song}" ]; then
             print_warn "Unable to find song '${song}' for artist '${artist}'."
             continue
         fi
 
         printf "%40s %40s %s\n" "'${artist}'" "'${song}'" "${line}"
-    done < "${LIBFILE}"
+    done < "${LIBRARYFILE}"
 }
 
 # ------------------------------------------------------------------------------
