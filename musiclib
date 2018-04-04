@@ -32,6 +32,7 @@ IGNOREOFFICIAL=
 PROMPTRESULTS=
 
 # Source utility
+. "${PROGDIR}/../lib/bash/commandline.sh"
 . "${PROGDIR}/../lib/bash/util.sh"
 
 ##
@@ -39,17 +40,29 @@ PROMPTRESULTS=
 #
 main()
 {
+    listmsg="List music in the library. If used along with '-q', then query is "
+    lisgmsg+="case sensitive."
+    querymsg="Search query for '-d', '-f', and '-l'. For multiple queries, use "
+    querymsg+="this option more than once."
+    noofficialmsg="The default behaviour is to append 'official' to the '-S' "
+    noofficialmsg+="search string, in order to find official music audio. This "
+    noofficialmsg+="flag ignores this default behaviour."
+    promptmsg="Prompt the user to select a video, whose audio will be downloaded."
+    testmsg="Test out a '--sync' but do not create any artist directories, or "
+    testmsg+="download any songs."
+
     cli_options "-h | --help            | Print program usage." \
                 "-v | --verbose         | Verbose output." \
                 "-S | --sync            | Sync music library." \
                 "-d | --download        | Download music." \
                 "-f | --find            | Find music in the library." \
-                "-l | --list            | List music in the library. If used along with '-q', then query is case sensitive." \
-                "-q | --query | search: | Search query for '-d', '-f', and '-l'. For multiple queries, use this option more than once." \
-                "-i | --ignore-official | The default behaviour is to append 'official' to the '-S' search string, in order to find official music audio. This flag ignores this default behaviour." \
-                "-p | --prompt-results  | Prompt the user to select a video, whose audio will be downloaded." \
-                "   | --test            | Test out a '--sync' but do not create any artist directories, or download any songs."
+                "-l | --list            | ${listmsg}" \
+                "-q | --query | search: | ${querymsg}" \
+                "-i | --ignore-official | ${noofficialmsg}" \
+                "-p | --prompt-results  | ${promptmsg}" \
+                "   | --test            | ${testmsg}"
     cli_parse "${@}"
+    cli_test
 
     # local short="hvSdflq:ipt"
     # local long="help,verbose,sync,download,find,list,query:,ignore-official,prompt-results,test"
