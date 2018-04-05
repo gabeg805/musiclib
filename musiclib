@@ -51,18 +51,29 @@ main()
     testmsg="Test out a '--sync' but do not create any artist directories, or "
     testmsg+="download any songs."
 
-    cli_options "-h | --help            | Print program usage." \
-                "-v | --verbose         | Verbose output." \
-                "-S | --sync            | Sync music library." \
-                "-d | --download        | Download music." \
-                "-f | --find            | Find music in the library." \
-                "-l | --list            | ${listmsg}" \
-                "-q | --query | search: | ${querymsg}" \
-                "-i | --ignore-official | ${noofficialmsg}" \
-                "-p | --prompt-results  | ${promptmsg}" \
-                "   | --test            | ${testmsg}"
+    cli_init "-h | --help            | Print program usage." \
+             "-v | --verbose         | Verbose output." \
+             "-S | --sync            | Sync music library." \
+             "-d | --download        | Download music." \
+             "-f | --find            | Find music in the library." \
+             "-l | --list            | ${listmsg}" \
+             "-q | --query | search:::| ${querymsg}" \
+             "-i | --ignore-official | ${noofficialmsg}" \
+             "-p | --prompt-results  | ${promptmsg}" \
+             "   | --test            | ${testmsg}"
     cli_parse "${@}"
     cli_test
+
+    x=$(cli_get "prompt-results")
+    echo $?
+    y=$(cli_get "query")
+    echo $?
+    z=$(cli_get "poop")
+    echo $?
+    echo AHHH
+    echo "${x}"
+    echo "${y}"
+    echo "${z}"
 
     # local short="hvSdflq:ipt"
     # local long="help,verbose,sync,download,find,list,query:,ignore-official,prompt-results,test"
@@ -129,57 +140,6 @@ main()
     # else
     #     exit ${EARG}
     # fi
-}
-
-# ------------------------------------------------------------------------------
-# Print program usage
-usage()
-{
-    echo "Usage: ${PROGRAM} [options] [args]"
-    echo
-    echo "Options:"
-    echo "    -h, --help"
-    echo "        Print program usage."
-    echo
-    echo "    -v, --verbose"
-    echo "        Verbose output."
-    echo
-    echo "    -S, --sync"
-    echo "        Sync music library."
-    echo
-    echo "    -d, --download"
-    echo "        Download music."
-    echo
-    echo "    -f, --find"
-    echo "        Find music in library."
-    echo
-    echo "    -l, --list"
-    echo "        List music in library. If used along with '-q' then query"
-    echo "        is case sensitive."
-    echo
-    echo "    -q, --query <name>"
-    echo "        Search query for '-d', '-f', and '-l'. For multiple queries,"
-    echo "        use this option more than once."
-    echo
-    echo "    -i, --ignore-official"
-    echo "        The default behavior is to append 'official' to the search"
-    echo "        criteria to find official music audio. This flag ignores this"
-    echo "        default behavior."
-    echo
-    echo "    -p, --prompt-results"
-    echo "        Prompt the user to select a video whose audio will be"
-    echo "        downloaded."
-    echo
-    echo "    --test"
-    echo "        Test out a '--sync' but do not create or download any songs."
-    echo
-    echo "Arguments:"
-    echo "    <name>"
-    echo "        Name of song or artist to query. This is case insensitive"
-    echo "        unless specified in an option above."
-    echo
-    echo "    <number>"
-    echo "        Resut number to use [Default: 1]."
 }
 
 ##
