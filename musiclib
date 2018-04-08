@@ -65,15 +65,8 @@ main()
     cli_test
 
     x=$(cli_get "prompt-results")
-    echo $?
     y=$(cli_get "query")
-    echo $?
     z=$(cli_get "poop")
-    echo $?
-    echo AHHH
-    echo "${x}"
-    echo "${y}"
-    echo "${z}"
 
     # local short="hvSdflq:ipt"
     # local long="help,verbose,sync,download,find,list,query:,ignore-official,prompt-results,test"
