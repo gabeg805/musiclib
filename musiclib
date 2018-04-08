@@ -48,91 +48,45 @@ main()
     noofficialmsg+="search string, in order to find official music audio. This "
     noofficialmsg+="flag ignores this default behaviour."
     promptmsg="Prompt the user to select a video, whose audio will be downloaded."
-    testmsg="Test out a '--sync' but do not create any artist directories, or "
+    testmsg="Dry run a '--sync' but do not create any artist directories, or "
     testmsg+="download any songs."
 
     cli_init "-h | --help            | Print program usage." \
-             "-v | --verbose         | Verbose output." \
-             "-S | --sync            | Sync music library." \
              "-d | --download        | Download music." \
+             "   | --dry-run         | ${testmsg}" \
              "-f | --find            | Find music in the library." \
              "-l | --list            | ${listmsg}" \
-             "-q | --query | search:::| ${querymsg}" \
              "-i | --ignore-official | ${noofficialmsg}" \
-             "-p | --prompt-results  | ${promptmsg}" \
-             "   | --test            | ${testmsg}"
+             "-p | --prompt-results  | ${promptmsg}"
+             "-q | --query | search:::| ${querymsg}" \
+             "-S | --sync            | Sync music library." \
+             "-v | --verbose         | Verbose output."
     cli_parse "${@}"
     cli_test
 
-    x=$(cli_get "prompt-results")
-    y=$(cli_get "query")
-    z=$(cli_get "poop")
+    local help="$(cli_get "help")"
+    local verbose="$(cli_get "verbose")"
+    local sync="$(cli_get "sync")"
+    local download="$(cli_get "download")"
+    local find="$(cli_get "find")"
+    local list="$(cli_get "list")"
+    local query="$(cli_get "query")"
+    local ignore="$(cli_get "ignore-official")"
+    local prompt="$(cli_get "prompt-results")"
+    local dryrun="$(cli_get "dry-run")"
 
-    # local short="hvSdflq:ipt"
-    # local long="help,verbose,sync,download,find,list,query:,ignore-official,prompt-results,test"
-    # parse_options "${PROGRAM}" "${short}" "${long}" "${@}"
-
-    # local DOWNLOAD=
-    # local FIND=
-    # local LIST=
-    # local QUERY=()
-    # while true
-    # do
-    #     case "${1}" in
-    #         -h|--help)
-    #             usage
-    #             exit 0
-    #             ;;
-    #         -v|--verbose)
-    #             VERBOSE=true
-    #             ;;
-    #         -S|--sync)
-    #             SYNC=true
-    #             ;;
-    #         -d|--download)
-    #             DOWNLOAD=true
-    #             ;;
-    #         -f|--find)
-    #             FIND=true
-    #             ;;
-    #         -l|--list)
-    #             LIST=true
-    #             ;;
-    #         -q|--query)
-    #             shift
-    #             QUERY+=("${1}")
-    #             ;;
-    #         -i,--ignore-official)
-    #             IGNOREOFFICIAL=
-    #             ;;
-    #         -p|--prompt-results)
-    #             PROMPTRESULTS=true
-    #             ;;
-    #         --test)
-    #             TEST=true
-    #             ;;
-    #         --)
-    #             break
-    #             ;;
-    #         *)
-    #             exit ${EARG}
-    #             ;;
-    #     esac
-    #     shift
-    # done
-
-    # # Run options
-    # if [ -n "${SYNC}" ]; then
-    #     sync_music_library
-    # elif [ -n "${DOWNLOAD}" ]; then
-    #     download_music "${QUERY[@]}"
-    # elif [ -n "${FIND}" ]; then
-    #     find_music_in_library "${QUERY[@]}"
-    # elif [ -n "${LIST}" ]; then
-    #     list_music_library "${QUERY[@]}"
-    # else
-    #     exit ${EARG}
-    # fi
+    # Run options
+    if [ -n "${sync}" ]; then
+        sync_music_library
+    elif [ -n "${download}" ]; then
+        download_music "${query[@]}"
+    elif [ -n "${find}" ]; then
+        find_music_in_library "${query[@]}"
+    elif [ -n "${list}" ]; then
+        list_music_library "${query[@]}"
+    else
+        exit ${EARG}
+    fi
 }
 
 ##
