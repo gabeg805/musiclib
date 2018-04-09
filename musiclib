@@ -74,7 +74,7 @@ main()
     local ignore="$(cli_get "ignore-official")"
     local prompt="$(cli_get "prompt-results")"
     local dryrun="$(cli_get "dry-run")"
-    
+
     # Run options
     if [ -n "${sync}" ]; then
         sync_music_library
