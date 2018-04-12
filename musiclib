@@ -45,13 +45,14 @@ main()
                 "-d|--download       |Download music." \
                 "  |--dry-run        |Do not create artist directories or download any songs. Used with '-S'." \
                 "-f|--find           |Find music in the library." \
-                "-l|--list           |List music in the library." \
+                "-l|--list=playlist::|List music in the library." \
                 "-p|--prompt         |Prompt the user to select a video, whose audio will be downloaded." \
                 "-q|--query=search:::|Query string." \
                 "-S|--sync           |Sync music library." \
                 "-u|--unofficial     |Do not append 'official' to the Youtube search string." \
                 "-v|--verbose        |Verbose output."
     cli_parse "${@}"
+    exit
 
     local help="$(cli_get "help")"
     local verbose="$(cli_get "verbose")"
