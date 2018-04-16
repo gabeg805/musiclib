@@ -32,17 +32,16 @@ IGNOREOFFICIAL=
 PROMPTRESULTS=
 
 # Source utility
-. "${PROGDIR}/../lib/bash/commandline.sh"
-. "${PROGDIR}/../lib/bash/util.sh"
+. "commandline.sh"
+. "io.sh"
 
 ##
 # Music Library
 ##
 main()
 {
-
     cli_options "-h|--help           |Print program usage." \
-                "-d|--download       |Download music." \
+                "-d|--download=song: |Download music." \
                 "  |--dry-run        |Do not create artist directories or download any songs. Used with '-S'." \
                 "-f|--find           |Find music in the library." \
                 "-l|--list=playlist::|List music in the library." \
@@ -52,19 +51,31 @@ main()
                 "-u|--unofficial     |Do not append 'official' to the Youtube search string." \
                 "-v|--verbose        |Verbose output."
     cli_parse "${@}"
-    exit
+    cli_test
 
     local help="$(cli_get "help")"
-    local verbose="$(cli_get "verbose")"
-    local sync="$(cli_get "sync")"
     local download="$(cli_get "download")"
+    local dryrun="$(cli_get "dry-run")"
     local find="$(cli_get "find")"
     local list="$(cli_get "list")"
+    local prompt="$(cli_get "prompt")"
     local query="$(cli_get "query")"
-    local ignore="$(cli_get "ignore-official")"
-    local prompt="$(cli_get "prompt-results")"
-    local dryrun="$(cli_get "dry-run")"
+    local sync="$(cli_get "sync")"
+    local unofficial="$(cli_get "unofficial")"
+    local verbose="$(cli_get "verbose")"
 
+    echo "Help     : ${help}"
+    echo "Download : ${download}"
+    echo "Dryrun   : ${dryrun}"
+    echo "Find     : ${find}"
+    echo "List     : ${list}"
+    echo "Prompt   : ${prompt}"
+    echo "Query    : ${query}"
+    echo "Sync     : ${sync}"
+    echo "Unoffic  : ${unofficial}"
+    echo "Verbose  : ${verbose}"
+
+    exit
     # Run options
     if [ -n "${sync}" ]; then
         sync_music_library
