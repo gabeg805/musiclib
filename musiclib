@@ -51,7 +51,6 @@ main()
                 "-u|--unofficial     |Do not append 'official' to the Youtube search string." \
                 "-v|--verbose        |Verbose output."
     cli_parse "${@}"
-    cli_test
 
     local help="$(cli_get "help")"
     local download="$(cli_get "download")"
@@ -64,29 +63,25 @@ main()
     local unofficial="$(cli_get "unofficial")"
     local verbose="$(cli_get "verbose")"
 
-    echo "Help     : ${help}"
-    echo "Download : ${download}"
-    echo "Dryrun   : ${dryrun}"
-    echo "Find     : ${find}"
-    echo "List     : ${list}"
-    echo "Prompt   : ${prompt}"
-    echo "Query    : ${query}"
-    echo "Sync     : ${sync}"
-    echo "Unoffic  : ${unofficial}"
-    echo "Verbose  : ${verbose}"
-
-    exit
     # Run options
-    if [ -n "${sync}" ]; then
-        sync_music_library
-    elif [ -n "${download}" ]; then
-        download_music "${query[@]}"
-    elif [ -n "${find}" ]; then
-        find_music_in_library "${query[@]}"
-    elif [ -n "${list}" ]; then
-        list_music_library "${query[@]}"
+    if [ -n "${help}" ]
+    then
+        cli_usage
+        exit 0
+    elif [ -n "${download}" ]
+    then
+        download_music "${dryrun}" "${prompt}" "${unofficial}" "${download}"
+    elif [ -n "${find}" ]
+    then
+        find_music_in_library "${find}"
+    elif [ -n "${list}" ]
+    then
+        list_music_library "${list}"
+    elif [ -n "${sync}" ]
+    then
+        sync_music_library "${dryrun}" "${prompt}" "${unofficial}" "${sync}"
     else
-        exit ${EARG}
+        exit 1
     fi
 }
 
@@ -132,6 +127,58 @@ uninstall()
     rm -rfv "${PROGSHAREDIR}"
 }
 
+
+##
+# Download music
+##
+download_music()
+{
+    local dryrun="${1}"
+    local prompt="${2}"
+    local unofficial="${3}"
+    local download="${4}"
+
+    if [ -z "${download}" ]; then
+        print_err "Unable to download music: No input found."
+        exit 1
+    fi
+
+    echo "DryRun: ${dryrun}."
+    echo "Prompt: ${prompt}."
+    echo "Unoffi: ${unofficial}."
+    echo "Downlo: ${download}."
+
+    local queries=("${@}")
+    local artist=
+    local song=
+
+    for q in "${queries[@]}"; do
+        builtin cd "${LIBRARYDIR}"
+
+        artist="$(get_artist "${download}")"
+        song="$(get_song "${download}")"
+        echo "Artist : ${artist}"
+        echo "Song   : ${song}"
+
+        # Check parameters and ensure file does not already exist
+        if ! check_artist "${artist}" || ! check_song "${song}" \
+                || ! check_music_file "${artist}" "${song}"
+        then
+            continue
+        fi
+
+        # Download music query
+        if [ -z "${dryrun}" ]
+        then
+            youtube_download "${q}"
+        fi
+
+        if [ "${q}" != "${queries[-1]}" ] || [ -n "${SYNC}" ]; then
+            echo
+        fi
+    done
+}
+
 # ------------------------------------------------------------------------------
 # Sync music library
 sync_music_library()
@@ -145,41 +192,6 @@ sync_music_library()
 
         download_music "${line}"
     done < "${LIBRARYFILE}"
-}
-
-# ------------------------------------------------------------------------------
-# Download music
-download_music()
-{
-    if [ -z "${1}" ]; then
-        print_err "Unable to download music: No search query found."
-        exit 1
-    fi
-
-    local queries=("${@}")
-    local artist=
-    local song=
-
-    for q in "${queries[@]}"; do
-        builtin cd "${LIBRARYDIR}"
-
-        artist="$(get_artist "${q}")"
-        song="$(get_song "${q}")"
-
-        # Check parameters and ensure file does not already exist
-        if ! check_artist "${artist}" || ! check_song "${song}" \
-                || ! check_music_file "${artist}" "${song}"
-        then
-            continue
-        fi
-
-        # Download music query
-        youtube_download "${q}"
-
-        if [ "${q}" != "${queries[-1]}" ] || [ -n "${SYNC}" ]; then
-            echo
-        fi
-    done
 }
 
 # ------------------------------------------------------------------------------
@@ -278,13 +290,6 @@ youtube_download()
     local query="${1}"
     local artist="$(get_artist "${query}")"
     local song="$(get_song "${query}")"
-
-    echo "Artist : ${artist}"
-    echo "Song   : ${song}"
-
-    if [ -n "${TEST}" ]; then
-        return 0
-    fi
 
     mkdir -pv "${artist}"
     builtin cd "${artist}"
