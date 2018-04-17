@@ -24,16 +24,25 @@ LIBRARYFILE="${LIBRARYDIR}/library.txt"
 YOUTUBE="https://www.youtube.com"
 RESULTPAGE="result.html"
 
+MUSIC_LIB_RESULTS_FILE="results.txt"
+MUSIC_LIB_DRYRUN=
+MUSIC_LIB_PROMPT=
+MUSIC_LIB_UNOFFICIAL=
+MUSIC_LIB_VERBOSE=
+
 # Options
 VERBOSE=
 SYNC=
-TEST=
-IGNOREOFFICIAL=
-PROMPTRESULTS=
 
 # Source utility
 . "commandline.sh"
 . "io.sh"
+
+EXIT_MUSIC_LIB_SEARCH_PAGE_ERROR=8
+EXIT_MUSIC_LIB_INVALID_DOWNLOAD=9
+EXIT_MUSIC_LIB_ARTIST_NOT_FOUND=10
+EXIT_MUSIC_LIB_SONG_NAME_NOT_FOUND=11
+EXIT_MUSIC_LIB_MUSIC_NOT_FOUND=12
 
 ##
 # Music Library
@@ -51,17 +60,19 @@ main()
                 "-u|--unofficial     |Do not append 'official' to the Youtube search string." \
                 "-v|--verbose        |Verbose output."
     cli_parse "${@}"
+    cli_test
 
     local help="$(cli_get "help")"
     local download="$(cli_get "download")"
-    local dryrun="$(cli_get "dry-run")"
     local find="$(cli_get "find")"
     local list="$(cli_get "list")"
-    local prompt="$(cli_get "prompt")"
     local query="$(cli_get "query")"
     local sync="$(cli_get "sync")"
-    local unofficial="$(cli_get "unofficial")"
-    local verbose="$(cli_get "verbose")"
+
+    MUSIC_LIB_DRYRUN="$(cli_get "dry-run")"
+    MUSIC_LIB_PROMPT="$(cli_get "prompt")"
+    MUSIC_LIB_UNOFFICIAL="$(cli_get "unofficial")"
+    MUSIC_LIB_VERBOSE="$(cli_get "verbose")"
 
     # Run options
     if [ -n "${help}" ]
@@ -70,7 +81,7 @@ main()
         exit 0
     elif [ -n "${download}" ]
     then
-        download_music "${dryrun}" "${prompt}" "${unofficial}" "${download}"
+        download_music "${download}"
     elif [ -n "${find}" ]
     then
         find_music_in_library "${find}"
@@ -79,7 +90,7 @@ main()
         list_music_library "${list}"
     elif [ -n "${sync}" ]
     then
-        sync_music_library "${dryrun}" "${prompt}" "${unofficial}" "${sync}"
+        sync_music_library "${sync}"
     else
         exit 1
     fi
@@ -129,54 +140,62 @@ uninstall()
 
 
 ##
-# Download music
+# Download music.
 ##
 download_music()
 {
-    local dryrun="${1}"
-    local prompt="${2}"
-    local unofficial="${3}"
-    local download="${4}"
+    local download="${1}"
 
-    if [ -z "${download}" ]; then
-        print_err "Unable to download music: No input found."
-        exit 1
+    echo "DryRun     : ${MUSIC_LIB_DRYRUN}."
+    echo "Prompt     : ${MUSIC_LIB_PROMPT}."
+    echo "Unofficial : ${MUSIC_LIB_UNOFFICIAL}."
+    echo "Download   : ${download}."
+
+    if ! music_lib_is_downloadable "${download}"
+    then
+        exit ${EXIT_MUSIC_LIB_INVALID_DOWNLOAD}
     fi
 
-    echo "DryRun: ${dryrun}."
-    echo "Prompt: ${prompt}."
-    echo "Unoffi: ${unofficial}."
-    echo "Downlo: ${download}."
+    local artist="$(music_lib_get_artist "${download}")"
+    local song="$(music_lib_get_song "${download}")"
+    if ! music_lib_is_artist "${artist}" && ! music_lib_is_song "${song}"
+    then
+        exit ${EXIT_MUSIC_LIB_SONG_NAME_NOT_FOUND}
+    elif ! music_lib_is_music "${artist}" "${song}"
+    then
+        exit ${EXIT_MUSIC_LIB_MUSIC_NOT_FOUND}
+    else
+        :
+    fi
 
-    local queries=("${@}")
-    local artist=
-    local song=
-
-    for q in "${queries[@]}"; do
+    echo "Artist : ${artist}"
+    echo "Song   : ${song}"
+    if ! music_lib_is_dryrun
+    then
         builtin cd "${LIBRARYDIR}"
-
-        artist="$(get_artist "${download}")"
-        song="$(get_song "${download}")"
-        echo "Artist : ${artist}"
-        echo "Song   : ${song}"
-
-        # Check parameters and ensure file does not already exist
-        if ! check_artist "${artist}" || ! check_song "${song}" \
-                || ! check_music_file "${artist}" "${song}"
+        if [ -n "${artist}" ]
         then
-            continue
+            mkdir -pv "${artist}"
+            builtin cd "${artist}"
         fi
 
-        # Download music query
-        if [ -z "${dryrun}" ]
+        music_lib_download_youtube_search_page "${query}"
+        music_lib_download_save_results
+
+        if music_lib_is_prompt
         then
-            youtube_download "${q}"
+            music_lib_download_prompt
+            # read response
+            # if ! is_integer "${response}" \
+            #         || [ ${response} -lt 1 -o ${response} -gt ${i} ]
+            # then
+            #     return 1
+            # fi
+            # response=$[ ${response} - 1 ]
         fi
-
-        if [ "${q}" != "${queries[-1]}" ] || [ -n "${SYNC}" ]; then
-            echo
-        fi
-    done
+        exit
+        youtube_download "${unofficial}" "${prompt}" "${download}"
+    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -221,8 +240,8 @@ find_music_in_library()
         # Display matches
         for f in $(find . -iname "*${q}*"); do
             name=$(basename "${f}")
-            artist="$(get_artist "${name}")"
-            song="$(get_song "${name}")"
+            artist="$(music_lib_get_artist "${name}")"
+            song="$(music_lib_get_song "${name}")"
             i=$[ ${i} + 1 ]
 
             echo "Artist : ${artist}"
@@ -273,7 +292,7 @@ list_music_library()
         echo "${q}"
 
         for f in *; do
-            song="$(get_song "${f}")"
+            song="$(music_lib_get_song "${f}")"
             echo "    ${song}"
         done
 
@@ -283,25 +302,21 @@ list_music_library()
     done
 }
 
-# ------------------------------------------------------------------------------
-# Download music
+##
+# Connect to youtube and download music to the music library.
+##
 youtube_download()
 {
     local query="${1}"
-    local artist="$(get_artist "${query}")"
-    local song="$(get_song "${query}")"
+    local artist="$(music_lib_get_artist "${query}")"
+    local song="$(music_lib_get_song "${query}")"
 
-    mkdir -pv "${artist}"
-    builtin cd "${artist}"
+    local result=$(music_lib_download_save_results "${result}")
 
-    # Download the song
-    download_search_results_page "${query}"
-
-    local result=$(get_search_result "${result}")
     local title=$(echo "${result}" | cut -f 1 -d ';')
     local href=$(echo "${result}" | cut -f 2 -d ';')
 
-    echo "Downloading..."
+    print_info "Downloading..."
     youtube-dl-mp3 --no-playlist -x --audio-format mp3 "${YOUTUBE}${href}"
 
     # Rename the song to the appropriate name
@@ -312,78 +327,52 @@ youtube_download()
     rm -f "${RESULTPAGE}"
 }
 
-# ------------------------------------------------------------------------------
-# Download search results page
-download_search_results_page()
+##
+# Prompt user which song they would like to download.
+##
+music_lib_download_prompt()
 {
-    # Determine URL of song to search
-    local query="${1}"
-    local search=$(echo "${query}" | sed -e 's/ /\+/g' -e 's/,/%2c/g' -e "s/'/%27/g")
-    local searchurl="${YOUTUBE}/results?search_query=${search}"
+    print_info "Which song would you like to download?"
+    local i=1
+    while IFS= read -r line
+    do
+        echo "Line: ${line}."
+    done < "${MUSIC_LIB_RESULTS_FILE}"
 
-    if [ -z "${IGNOREOFFICIAL}" ]; then
-        searchurl="${searchurl}+official+video"
-    fi
-
-    # Download youtube search page
-    wget -q "${searchurl}" -O "${RESULTPAGE}"
+    echo "${i}: ${title}" 1>&2
+    i=$[ ${i} + 1 ]
+    echo -n "> "
+    echo
+    exit 0
 }
 
-# ------------------------------------------------------------------------------
+##
 # Get href of desired search from results page. Will prompt user if option is
-# specified
-get_search_result()
+# specified.
+# Populate list of all hrefs in search page
+##
+music_lib_download_save_results()
 {
     local IFS=$'\n'
-    local _result="${1}"
-    local allref=()
-    local alltitle=()
-    local ref=
-    local title=
-    # local response=0
-    local i=1
-
-    if [ -n "${PROMPTRESULTS}" ]; then
-        echo "Which song would you like to download?" 1>&2
-    fi
-
-    # Populate list of all hrefs in search page
-    for line in $(grep 'href="/watch?v=' "${RESULTPAGE}" | grep 'title='); do
-        ref=$(get_search_result_href "${line}")
-
-        # Do something with the title
-        if [ "${ref/list=}" == "${ref}" ]; then
+    local line=
+    local i=0
+    echo "Results File: ${MUSIC_LIB_RESULTS_FILE}."
+    for line in $(grep 'href="/watch?v=' "${RESULTPAGE}" | grep 'title=')
+    do
+        local ref=$(get_search_result_href "${line}")
+        local title=
+        if [ "${ref/list=}" == "${ref}" ]
+        then
             title=$(get_search_result_title "${line}")
-            alltitle+=("${title}")
-            allref+=("${ref}")
-
-            # Stop after one search if prompt not specified
-            if [ -z "${PROMPTRESULTS}" ]; then
+            i=$[ ${i} + 1 ]
+            echo "~${ref};${title}~" 1>&2
+            echo "${ref};${title}" >> "${MUSIC_LIB_RESULTS_FILE}"
+            if ! music_lib_is_prompt
+            then
                 break
-            else
-                echo "${i}: ${title}" 1>&2
-                i=$[ ${i} + 1 ]
             fi
         fi
     done
-
-    # Prompt user if specified
-    if [ -n "${PROMPTRESULTS}" ]; then
-        echo -n "> " 1>&2
-        read response </dev/tty
-
-        if ! is_integer "${response}" \
-                || [ ${response} -lt 1 -o ${response} -gt ${i} ]
-        then
-            return 1
-        fi
-
-        response=$[ ${response} - 1 ]
-    else
-        response=0
-    fi
-
-    echo "${alltitle[${response}]};${allref[${response}]}"
 }
 
 # ------------------------------------------------------------------------------
@@ -418,8 +407,8 @@ check_music_library()
             continue;
         fi
 
-        artist=$(get_artist "${line}")
-        song=$(get_song "${line}")
+        artist=$(music_lib_get_artist "${line}")
+        song=$(music_lib_get_song "${line}")
 
         # Check for existence of artist directory
         if [ ! -d "${LIBRARYDIR}/${artist}" ]; then
@@ -437,81 +426,171 @@ check_music_library()
     done < "${LIBRARYFILE}"
 }
 
-# ------------------------------------------------------------------------------
-# Return artist name
-get_artist()
+
+
+
+
+
+
+
+
+
+
+
+
+##
+# Download Youtube search results page.
+# 
+# Convert the search string into a URL-friendly string, append "official video"
+# to the end if unofficial flag is not set, and download the results page.
+##
+music_lib_download_youtube_search_page()
 {
-    local line="${1}"
-    local artist=
-    local i=
-
-    # Artist name is everything before ' - '
-    for (( i=0; i < ${#line}; i++ )); do
-        if [ "${line:${i}:3}" == " - " ]; then
-            echo "${line:0:${i}}"
-            return 0
-        fi
-    done
-}
-
-# ------------------------------------------------------------------------------
-# Return song name
-get_song()
-{
-    local line="${1}"
-    local song=
-    local len=
-    local i=
-    local j=
-
-    # Song name is everything after ' - '
-    for (( i=0; i < ${#line}; i++ )); do
-        if [ "${line:${i}:3}" == " - " ]; then
-            j=$[ ${i} + 3 ]
-            len=$[ ${#line} - ${j} ]
-
-            echo "${line:${j}:${len}}"
-
-            return 0
-        fi
-    done
-}
-
-# ------------------------------------------------------------------------------
-# Check artist name
-check_artist()
-{
-    if [ -z "${artist}" ]; then
-        print_err "Artist could not be found for query: '${q}'"
-        return 1
+    local unofficial="${1}"
+    local search="${2}"
+    local url=$(echo "${YOUTUBE}/results?search_query=${search}" \
+                    | sed -e 's/ /\+/g' -e 's/,/%2c/g' -e "s/'/%27/g")
+    if [ -n "${unofficial}" ]
+    then
+        url="${url}+official+video"
     fi
-
+    print_info "Downloading Youtube search results page."
+    wget -q "${url}" -O "${RESULTPAGE}"
+    if [ $? -ne 0 ]
+    then
+        print_err "Unable to download search page."
+        rm -f "${RESULTPAGE}"
+        exit ${EXIT_MUSIC_LIB_SEARCH_PAGE_ERROR}
+    fi
     return 0
 }
 
-# ------------------------------------------------------------------------------
-# Check song name
-check_song()
+##
+# Return the name of the artist from the input song name.
+# 
+# Expects an input song of the form 'Artist - Song.mp3'. If the input and output
+# are exactly the same, return an error. In this case, it is assumed that the
+# input is in fact the song name, without the artist.
+##
+music_lib_get_artist()
 {
-    if [ -z "${song}" ]; then
-        print_err "Song name could not be found for query: '${q}'"
-        return 1
+    local file="${1}"
+    local artist="${file% - *}"
+    if [ "${artist}" == "${file}" ]
+    then
+        return ${EXIT_MUSIC_LIB_ARTIST_NOT_FOUND}
+    else
+        return 0
     fi
+}
 
+##
+# Return the name of the song from the input song name.
+# 
+# Expects an input song of the form 'Artist - Song.mp3'; however, it is ok if
+# the input and the output are exactly the same. Maybe the user does not know
+# the artist's name.
+##
+music_lib_get_song()
+{
+    local file="${1}"
+    local song="${file#* - }"
+    echo "${song}"
     return 0
 }
 
-# ------------------------------------------------------------------------------
-# Check artist name
-check_music_file()
+##
+# Check if current run of the script is a dry-run.
+##
+music_lib_is_dryrun()
 {
-    if [ -f "${artist}/${artist} - ${song}".* ]; then
+    if [ -n "${MUSIC_LIB_DRYRUN}" ]
+    then
+        return 0
+    else
         return 1
     fi
-
-    return 0
 }
 
-# ------------------------------------------------------------------------------
+##
+# Check if the script needs to prompt the user.
+##
+music_lib_is_prompt()
+{
+    if [ -n "${MUSIC_LIB_PROMPT}" ]
+    then
+        return 0
+    else
+        return 1
+    fi
+}
+
+##
+# Check name of artist.
+##
+music_lib_is_artist()
+{
+    local artist="${1}"
+    if [ -n "${artist}" ]; then
+        return 0
+    else
+        print_err "Could not determine artist name."
+        return 1
+    fi
+}
+
+##
+# Check song name.
+##
+music_lib_is_song()
+{
+    local song="${1}"
+    if [ -n "${song}" ]; then
+        return 0
+    else
+        print_err "Could not determine song name."
+        return 1
+    fi
+}
+
+##
+# Check if music file exists in the music library.
+##
+music_lib_is_music()
+{
+    local artist="${1}"
+    local song="${1}"
+    local file="${LIBRARYDIR}/"
+    if [ -n "${artist}" ]
+    then
+        file+="${artist}/${artist} - ${song}"
+    else
+        file+="${song}"
+    fi
+    if [ ! -f "${file}.mp3" ]
+    then
+        return 0
+    fi
+    print_err "Music '${file}' already exists in your music library."
+    return 1
+}
+
+##
+# Check if input was a song that could be downloaded.
+##
+music_lib_is_downloadable()
+{
+    local download="${1}"
+    if [ -n "${download}" ]
+    then
+        return 0
+    else
+        print_err "Must specify song to download."
+        return 1
+    fi
+}
+
+##
 # Run script
+##
 main "${@}"
