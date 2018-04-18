@@ -10,21 +10,23 @@
 # 
 # Description: A command line interface to interact with your music library.
 # 
-# Notes: None.
+# Notes: There's a thing with last lines when reading the file and getting
+#        length of file. There's a hard limit of 10 save results.
 # 
 # ------------------------------------------------------------------------------
 
 # Globals
 PROGRAM="${0##*/}"
 PROGDIR=$(dirname "$(readlink -f "${0}")")
-PROGSHAREDIR="${HOME}/.local/share/${PROGRAM}"
-PLAYLISTDIR="${PROGSHAREDIR}/playlist"
-LIBRARYDIR="${PROGSHAREDIR}/library"
+MUSIC_LIB_SHARE_DIR="${HOME}/.local/share/${PROGRAM}"
+
+PLAYLISTDIR="${MUSIC_LIB_SHARE_DIR}/playlist"
+LIBRARYDIR="${MUSIC_LIB_SHARE_DIR}/library"
 LIBRARYFILE="${LIBRARYDIR}/library.txt"
 YOUTUBE="https://www.youtube.com"
-RESULTPAGE="result.html"
+RESULTPAGE="/tmp/results.html"
 
-MUSIC_LIB_RESULTS_FILE="results.txt"
+MUSIC_LIB_RESULTS_FILE="/tmp/results.txt"
 MUSIC_LIB_DRYRUN=
 MUSIC_LIB_PROMPT=
 MUSIC_LIB_UNOFFICIAL=
@@ -38,11 +40,15 @@ SYNC=
 . "commandline.sh"
 . "io.sh"
 
+EXIT_MUSIC_LIB_INVALID_INSTALL_ARG=6
+EXIT_MUSIC_LIB_INVALID_INSTALL_LOC=6
+EXIT_MUSIC_LIB_INVALID_SEARCH=7
 EXIT_MUSIC_LIB_SEARCH_PAGE_ERROR=8
 EXIT_MUSIC_LIB_INVALID_DOWNLOAD=9
 EXIT_MUSIC_LIB_ARTIST_NOT_FOUND=10
 EXIT_MUSIC_LIB_SONG_NAME_NOT_FOUND=11
 EXIT_MUSIC_LIB_MUSIC_NOT_FOUND=12
+EXIT_MUSIC_LIB_INVALID_RESULT=13
 
 ##
 # Music Library
@@ -60,28 +66,28 @@ main()
                 "-u|--unofficial     |Do not append 'official' to the Youtube search string." \
                 "-v|--verbose        |Verbose output."
     cli_parse "${@}"
-    cli_test
 
-    local help="$(cli_get "help")"
-    local download="$(cli_get "download")"
-    local find="$(cli_get "find")"
-    local list="$(cli_get "list")"
-    local query="$(cli_get "query")"
-    local sync="$(cli_get "sync")"
+    local help=$(cli_get "help")
+    local download=$(cli_get "download")
+    local find=$(cli_get "find")
+    local list=$(cli_get "list")
+    local query=$(cli_get "query")
+    local sync=$(cli_get "sync")
 
-    MUSIC_LIB_DRYRUN="$(cli_get "dry-run")"
-    MUSIC_LIB_PROMPT="$(cli_get "prompt")"
-    MUSIC_LIB_UNOFFICIAL="$(cli_get "unofficial")"
-    MUSIC_LIB_VERBOSE="$(cli_get "verbose")"
+    MUSIC_LIB_DRYRUN=$(cli_get "dry-run")
+    MUSIC_LIB_PROMPT=$(cli_get "prompt")
+    MUSIC_LIB_UNOFFICIAL=$(cli_get "unofficial")
+    MUSIC_LIB_VERBOSE=$(cli_get "verbose")
 
     # Run options
+    trap music_lib_cleanup EXIT
     if [ -n "${help}" ]
     then
         cli_usage
         exit 0
     elif [ -n "${download}" ]
     then
-        download_music "${download}"
+        music_lib_download "${download}"
     elif [ -n "${find}" ]
     then
         find_music_in_library "${find}"
@@ -90,127 +96,10 @@ main()
         list_music_library "${list}"
     elif [ -n "${sync}" ]
     then
-        sync_music_library "${sync}"
+        sync_music_library
     else
         exit 1
     fi
-}
-
-##
-# Install playlist and library configuration files under user's home
-#
-install()
-{
-    local playlist=
-    local library=
-
-    print_info "Creating local directory in home."
-    mkdir -pv "${PROGSHAREDIR}"
-
-    echo "Where are your music playlists located?"
-    read -p "> " playlist
-    if [ ! -d "${playlist}" ]
-    then
-        print_err "Directory '${playlist}' does not exist."
-        return 1
-    else
-        print_info "Saving music playlist location."
-        ln -sv "${playlist}" "${PLAYLISTDIR}"
-    fi
-
-    echo "Where is your music library located?"
-    read -p "> " library
-    if [ ! -d "${library}" ]; then 
-        print_err "Directory '${library}' does not exist."
-        return 2
-    else
-        print_info "Saving music library location."
-        ln -sv "${library}" "${LIBRARYDIR}"
-    fi
-}
-
-##
-# Uninstall configuration files under user's home
-#
-uninstall()
-{
-    print_info "Uninstalling Music On Console Wrapper."
-    rm -rfv "${PROGSHAREDIR}"
-}
-
-
-##
-# Download music.
-##
-download_music()
-{
-    local download="${1}"
-
-    echo "DryRun     : ${MUSIC_LIB_DRYRUN}."
-    echo "Prompt     : ${MUSIC_LIB_PROMPT}."
-    echo "Unofficial : ${MUSIC_LIB_UNOFFICIAL}."
-    echo "Download   : ${download}."
-
-    if ! music_lib_is_downloadable "${download}"
-    then
-        exit ${EXIT_MUSIC_LIB_INVALID_DOWNLOAD}
-    fi
-
-    local artist="$(music_lib_get_artist "${download}")"
-    local song="$(music_lib_get_song "${download}")"
-    if ! music_lib_is_artist "${artist}" && ! music_lib_is_song "${song}"
-    then
-        exit ${EXIT_MUSIC_LIB_SONG_NAME_NOT_FOUND}
-    elif ! music_lib_is_music "${artist}" "${song}"
-    then
-        exit ${EXIT_MUSIC_LIB_MUSIC_NOT_FOUND}
-    else
-        :
-    fi
-
-    echo "Artist : ${artist}"
-    echo "Song   : ${song}"
-    if ! music_lib_is_dryrun
-    then
-        builtin cd "${LIBRARYDIR}"
-        if [ -n "${artist}" ]
-        then
-            mkdir -pv "${artist}"
-            builtin cd "${artist}"
-        fi
-
-        music_lib_download_youtube_search_page "${query}"
-        music_lib_download_save_results
-
-        if music_lib_is_prompt
-        then
-            music_lib_download_prompt
-            # read response
-            # if ! is_integer "${response}" \
-            #         || [ ${response} -lt 1 -o ${response} -gt ${i} ]
-            # then
-            #     return 1
-            # fi
-            # response=$[ ${response} - 1 ]
-        fi
-        exit
-        youtube_download "${unofficial}" "${prompt}" "${download}"
-    fi
-}
-
-# ------------------------------------------------------------------------------
-# Sync music library
-sync_music_library()
-{
-    local line=
-
-    while IFS= read -r line; do
-        if [ ! -n "${line}" ]; then
-            continue
-        fi
-
-        download_music "${line}"
-    done < "${LIBRARYFILE}"
 }
 
 # ------------------------------------------------------------------------------
@@ -240,8 +129,8 @@ find_music_in_library()
         # Display matches
         for f in $(find . -iname "*${q}*"); do
             name=$(basename "${f}")
-            artist="$(music_lib_get_artist "${name}")"
-            song="$(music_lib_get_song "${name}")"
+            artist=$(music_lib_get_artist "${name}")
+            song=$(music_lib_get_song "${name}")
             i=$[ ${i} + 1 ]
 
             echo "Artist : ${artist}"
@@ -292,85 +181,12 @@ list_music_library()
         echo "${q}"
 
         for f in *; do
-            song="$(music_lib_get_song "${f}")"
+            song=$(music_lib_get_song "${f}")
             echo "    ${song}"
         done
 
         if [ "${q}" != "${queries[-1]}" ]; then
             echo
-        fi
-    done
-}
-
-##
-# Connect to youtube and download music to the music library.
-##
-youtube_download()
-{
-    local query="${1}"
-    local artist="$(music_lib_get_artist "${query}")"
-    local song="$(music_lib_get_song "${query}")"
-
-    local result=$(music_lib_download_save_results "${result}")
-
-    local title=$(echo "${result}" | cut -f 1 -d ';')
-    local href=$(echo "${result}" | cut -f 2 -d ';')
-
-    print_info "Downloading..."
-    youtube-dl-mp3 --no-playlist -x --audio-format mp3 "${YOUTUBE}${href}"
-
-    # Rename the song to the appropriate name
-    if [ -n "${title}" ]; then
-        mv "${title}.mp3" "${artist} - ${song}.mp3"
-    fi
-
-    rm -f "${RESULTPAGE}"
-}
-
-##
-# Prompt user which song they would like to download.
-##
-music_lib_download_prompt()
-{
-    print_info "Which song would you like to download?"
-    local i=1
-    while IFS= read -r line
-    do
-        echo "Line: ${line}."
-    done < "${MUSIC_LIB_RESULTS_FILE}"
-
-    echo "${i}: ${title}" 1>&2
-    i=$[ ${i} + 1 ]
-    echo -n "> "
-    echo
-    exit 0
-}
-
-##
-# Get href of desired search from results page. Will prompt user if option is
-# specified.
-# Populate list of all hrefs in search page
-##
-music_lib_download_save_results()
-{
-    local IFS=$'\n'
-    local line=
-    local i=0
-    echo "Results File: ${MUSIC_LIB_RESULTS_FILE}."
-    for line in $(grep 'href="/watch?v=' "${RESULTPAGE}" | grep 'title=')
-    do
-        local ref=$(get_search_result_href "${line}")
-        local title=
-        if [ "${ref/list=}" == "${ref}" ]
-        then
-            title=$(get_search_result_title "${line}")
-            i=$[ ${i} + 1 ]
-            echo "~${ref};${title}~" 1>&2
-            echo "${ref};${title}" >> "${MUSIC_LIB_RESULTS_FILE}"
-            if ! music_lib_is_prompt
-            then
-                break
-            fi
         fi
     done
 }
@@ -439,33 +255,283 @@ check_music_library()
 
 
 ##
-# Download Youtube search results page.
+# Install the Music Library.
+# 
+# Create the share directory under ~/.local/share, and create symbolic links to
+# the user's playlist and library locations.
+##
+music_lib_install()
+{
+    music_lib_install_location "share"
+    music_lib_install_location "playlist"
+    music_lib_install_location "library"
+}
+
+##
+# Uninstall configuration files under ~/.local/share and remove any temporary
+# files that were created.
+##
+music_lib_uninstall()
+{
+    music_lib_cleanup "uninstall"
+}
+
+# ------------------------------------------------------------------------------
+# Sync music library
+sync_music_library()
+{
+    local line=
+    while IFS= read -r line
+    do
+        if [ ! -n "${line}" ]
+        then
+            continue
+        fi
+        music_lib_download "${line}"
+    done < "${LIBRARYFILE}"
+}
+
+##
+# Download music.
+##
+music_lib_download()
+{
+    if ! music_lib_is_downloadable "${1}"
+    then
+        print_err "Must specify song to download."
+        exit ${EXIT_MUSIC_LIB_INVALID_DOWNLOAD}
+    fi
+
+    local download="${1}"
+    local artist=$(music_lib_get_artist "${download}")
+    local song=$(music_lib_get_song "${download}")
+    if ! music_lib_is_artist "${artist}" && ! music_lib_is_song "${song}"
+    then
+        print_err "Could not determine artist and song name."
+        exit ${EXIT_MUSIC_LIB_SONG_NAME_NOT_FOUND}
+    elif music_lib_is_music "${artist}" "${song}"
+    then
+        print_err "Music '${file}' already exists in your music library."
+        exit ${EXIT_MUSIC_LIB_MUSIC_NOT_FOUND}
+    else
+        echo "Artist : ${artist}"
+        echo "Song   : ${song}"
+    fi
+    if music_lib_is_dryrun
+    then
+        return 0
+    fi
+
+    builtin cd "${LIBRARYDIR}"
+    if [ -n "${artist}" ]
+    then
+        mkdir -pv "${artist}"
+        builtin cd "${artist}"
+    fi
+
+    music_lib_download_search_page "${download}"
+    music_lib_download_save_results
+    music_lib_download_content "${artist}" "${song}"
+}
+
+##
+# Download content to the music library.
+##
+music_lib_download_content()
+{
+    local artist="${1}"
+    local song="${2}"
+    local resultnum=1
+    local result=
+    local status=0
+    if music_lib_is_prompt
+    then
+        music_lib_download_prompt
+        read -p "> " resultnum
+    fi
+    result=$(music_lib_download_get_result "${resultnum}")
+    status=$?
+    echo "Result: ${result}."
+    if [ ${status} -ne 0 ]
+    then
+        return ${status}
+    fi
+
+    local href="${result%%;*}"
+    local title="${result#*;}"
+    print_info "Downloading..."
+    echo youtube-dl-mp3 --no-playlist -x --audio-format mp3 "${YOUTUBE}${href}"
+    if [ -n "${title}" ]
+    then
+        local name="${artist} - ${song}"
+        if [ -z "${artist}" ]
+        then
+            name="${song}"
+        fi
+        echo mv "${title}.mp3" "${name}.mp3"
+    fi
+}
+
+##
+# Get href of desired search from results page. Will prompt user if option is
+# specified.
+# Populate list of all hrefs in search page
+##
+music_lib_download_save_results()
+{
+    local IFS=$'\n'
+    local line=
+    local i=0
+    echo "Results File: ${MUSIC_LIB_RESULTS_FILE}."
+    : > "${MUSIC_LIB_RESULTS_FILE}"
+    for line in $(grep 'href="/watch?v=' "${RESULTPAGE}" | grep 'title=')
+    do
+        local ref=$(get_search_result_href "${line}")
+        local title=
+        if [ "${ref/list=}" == "${ref}" ]
+        then
+            title=$(get_search_result_title "${line}")
+            i=$[ ${i} + 1 ]
+            echo "${ref};${title}" >> "${MUSIC_LIB_RESULTS_FILE}"
+            if ! music_lib_is_prompt || [ ${i} -eq 10 ]
+            then
+                break
+            fi
+        fi
+    done
+}
+
+##
+# Download search results page.
 # 
 # Convert the search string into a URL-friendly string, append "official video"
 # to the end if unofficial flag is not set, and download the results page.
 ##
-music_lib_download_youtube_search_page()
+music_lib_download_search_page()
 {
-    local unofficial="${1}"
-    local search="${2}"
-    local url=$(echo "${YOUTUBE}/results?search_query=${search}" \
-                    | sed -e 's/ /\+/g' -e 's/,/%2c/g' -e "s/'/%27/g")
-    if [ -n "${unofficial}" ]
+    local search="${1}"
+    if [ -z "${search}" ]
     then
-        url="${url}+official+video"
+        print_err "Must specify a search query."
+        exit ${EXIT_MUSIC_LIB_INVALID_SEARCH}
     fi
-    print_info "Downloading Youtube search results page."
+    print_info "Downloading search results page."
+    local url=$(music_lib_download_get_url "${search}")
     wget -q "${url}" -O "${RESULTPAGE}"
     if [ $? -ne 0 ]
     then
         print_err "Unable to download search page."
-        rm -f "${RESULTPAGE}"
         exit ${EXIT_MUSIC_LIB_SEARCH_PAGE_ERROR}
     fi
     return 0
 }
 
 ##
+# Prompt user which song they would like to download.
+##
+music_lib_download_prompt()
+{
+    print_info "Which song would you like to download?"
+    local line=
+    local i=1
+    while IFS= read -r line
+    do
+        echo "${i}: ${line}"
+        i=$[ ${i} + 1 ]
+    done < "${MUSIC_LIB_RESULTS_FILE}"
+}
+
+##
+# Cleanup all files that were created.
+##
+music_lib_cleanup()
+{
+    if [ "${1}" == "uninstall" ]
+    then
+        print_info "Uninstalling the Music Library local share directory."
+        rm -rfv "${MUSIC_LIB_SHARE_DIR}"
+    fi
+    rm -f "${RESULTPAGE}"
+    rm -f "${MUSIC_LIB_RESULTS_FILE}"
+}
+
+##
+# Return the requested line in the results file.
+##
+music_lib_download_get_result()
+{
+    local num="${1}"
+    local file="${MUSIC_LIB_RESULTS_FILE}"
+    local length=$(wc -l < "${file}")
+    if [ -z "${num}" ]
+    then
+        print_err "Exiting."
+        return ${EXIT_MUSIC_LIB_INVALID_RESULT}
+    fi
+    if ! is_integer "${num}" || [ ${num} -lt 1 -o ${num} -gt ${length} ]
+    then
+        print_err "Unable to retrieve result number '${num}': No such result."
+        return ${EXIT_MUSIC_LIB_INVALID_RESULT}
+    fi
+    sed "${num}q;d" "${file}"
+    return $?
+}
+
+##
+# Return the URL to the content.
+##
+music_lib_download_get_url()
+{
+    local search="${1}"
+    local url=$(echo "${YOUTUBE}/results?search_query=${search}" \
+                    | sed -e 's/ /\+/g' -e 's/,/%2c/g' -e "s/'/%27/g")
+    if music_lib_is_official
+    then
+        url="${url}+official+video"
+    fi
+    echo "${url}"
+}
+
+##
+# Create Music Library links/directories for the given locations.
+# 
+# Accepted locations are 'share', 'library', or 'playlist'.
+##
+music_lib_install_location()
+{
+    local location="${1}"
+    local response=
+    local msg=
+    case "${location}" in
+        share)
+            print_info "Creating local share directory for the Music Library."
+            mkdir -pv "${MUSIC_LIB_SHARE_DIR}"
+            return 0
+            ;;
+        library)
+            msg="Where is your music library located?"
+            ;;
+        playlist)
+            msg="Where are your music playlists located?"
+            ;;
+        *)
+            exit ${EXIT_MUSIC_LIB_INVALID_INSTALL_ARG}
+            ;;
+    esac
+
+    echo "${msg}"
+    read -p "> " response
+    if [ ! -d "${response}" ]
+    then
+        print_err "Directory '${response}' does not exist."
+        return ${EXIT_MUSIC_LIB_INVALID_INSTALL_LOC}
+    else
+        print_info "Saving music ${location} location."
+        ln -sv "${playlist}" "${PLAYLISTDIR}"
+    fi
+    return 0
+}
+
 # Return the name of the artist from the input song name.
 # 
 # Expects an input song of the form 'Artist - Song.mp3'. If the input and output
@@ -479,9 +545,9 @@ music_lib_get_artist()
     if [ "${artist}" == "${file}" ]
     then
         return ${EXIT_MUSIC_LIB_ARTIST_NOT_FOUND}
-    else
-        return 0
     fi
+    echo "${artist}"
+    return 0
 }
 
 ##
@@ -526,6 +592,19 @@ music_lib_is_prompt()
 }
 
 ##
+# Check if the script should make a query for unofficial content.
+##
+music_lib_is_official()
+{
+    if [ -z "${MUSIC_LIB_UNOFFICIAL}" ]
+    then
+        return 0
+    else
+        return 1
+    fi
+}
+
+##
 # Check name of artist.
 ##
 music_lib_is_artist()
@@ -534,7 +613,6 @@ music_lib_is_artist()
     if [ -n "${artist}" ]; then
         return 0
     else
-        print_err "Could not determine artist name."
         return 1
     fi
 }
@@ -548,7 +626,6 @@ music_lib_is_song()
     if [ -n "${song}" ]; then
         return 0
     else
-        print_err "Could not determine song name."
         return 1
     fi
 }
@@ -567,11 +644,10 @@ music_lib_is_music()
     else
         file+="${song}"
     fi
-    if [ ! -f "${file}.mp3" ]
+    if [ -f "${file}.mp3" ]
     then
         return 0
     fi
-    print_err "Music '${file}' already exists in your music library."
     return 1
 }
 
@@ -585,7 +661,6 @@ music_lib_is_downloadable()
     then
         return 0
     else
-        print_err "Must specify song to download."
         return 1
     fi
 }
