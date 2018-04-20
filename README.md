@@ -48,4 +48,4 @@ The songs have a specific naming format of:
 ```
 
 So each line in the *library.txt* file should coincide with this. When running
-[Sync](#sync), the files are named with a *.mp3* extension.
+[Sync](#sync), the files are saved with a *.mp3* extension.
