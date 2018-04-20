@@ -1,14 +1,10 @@
 #!/bin/bash
 # ------------------------------------------------------------------------------
 # 
-# Name:    musiclib.sh
+# File: musiclib
 # Author:  Gabriel Gonzalez
-# Email:   gabeg@bu.edu
-# License: The MIT License (MIT)
 # 
-# Syntax: ./musiclib [options]
-# 
-# Description: A command line interface to interact with your music library.
+# Brief: A command line interface to interact with your music library.
 # 
 # Notes: There's a thing with last lines when reading the file and getting
 #        length of file. There's a hard limit of 10 save results.
@@ -485,7 +481,7 @@ music_lib_install_location()
     local response=
     case "${location}" in
         share)
-            print_info "Creating local share directory for the Music Library."
+            print_info "Installing the Music Library."
             mkdir -pv "${MUSIC_LIB_SHARE_DIR}"
             return 0
             ;;

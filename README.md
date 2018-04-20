@@ -1,33 +1,34 @@
-# MUSIC LIBRARY
+# Music Library
 
-## What is it?
+## Introduction
 
 A command line interface to interact with your music library.
 
-## Installation
+## Directory and File Structure
 
-This program assumes a directory structure, where your music library is in
-```
-LIBDIR="${HOME}/share/music/.library"
-```
-and there exists a text file in
-```
-LIBFILE="${LIBDIR}/library.txt"
-```
-that contains the name of your songs in the format
+The user is prompted as to where the Playlist and Library directories are
+located. Within the Library directory, there should be a file called
+*library.txt* which contains a list of songs that should be in the library.
+Furthermore, the songs must be named in the following format:
+
 ```
 <artist> - <song name>.mp3
 ```
 
-To change the *LIBDIR* or *LIBFILE* paths, open up *musiclib.sh*, find those
-variables at the top of the script, and modify them to reflect your desired
-path.
+## Install
+
+To install the Music Library, run:
+
+```
+musiclib --install
+```
+
+Note: This does not put this script in your *PATH*.
 
 ## Uninstall
 
-To uninstall the music library, simply remove your library directory:
+To uninstall the Music Library, run:
+
 ```
-$ rm -rv "${LIBDIR}"
+musiclib --uninstall
 ```
-where the location of *LIBDIR* is specified above. If you have changed that
-path, then enter the changed path instead.
