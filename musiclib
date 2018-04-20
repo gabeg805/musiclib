@@ -71,7 +71,7 @@ main()
                 "  |--install       |Install the necessary Music Library components." \
                 "-l|--list=search:  |List music in the library or playlist. See '-p' option.." \
                 "-n|--no-prompt     |Do not prompt the user to select a video to download." \
-                "-p|--path=location:|Search in 'library' or 'playlist'. [Default: 'playlist']."
+                "-p|--path=location:|Search in 'library' or 'playlist'. [Default: 'playlist']." \
                 "-S|--sync          |Sync music library." \
                 "  |--uninstall     |Uninstall the Music Library." \
                 "-u|--unofficial    |Do not append 'official' to the Youtube search string." \
