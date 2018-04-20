@@ -64,17 +64,18 @@ EXIT_MUSIC_LIB_FIND_EMPTY=15
 ##
 main()
 {
-    cli_options "-h|--help           |Print program usage." \
-                "-d|--download=song: |Download music." \
-                "  |--dry-run        |Do not create artist directories or download any songs. Used with '-S'." \
-                "-f|--find=search:   |Find music in the library." \
-                "  |--install        |Install the necessary Music Library components." \
-                "-l|--list=playlist::|List music in the library." \
-                "-p|--prompt         |Prompt the user to select a video, whose audio will be downloaded." \
-                "-S|--sync           |Sync music library." \
-                "  |--uninstall      |Uninstall the Music Library." \
-                "-u|--unofficial     |Do not append 'official' to the Youtube search string." \
-                "-v|--verbose        |Verbose output."
+    cli_options "-h|--help          |Print program usage." \
+                "-d|--download=song:|Download music." \
+                "-T|--dry-run       |Do not create artist directories or download any songs. Used with '-S'." \
+                "-f|--find=search:  |Find music in the library or playlist. See '-p' option." \
+                "  |--install       |Install the necessary Music Library components." \
+                "-l|--list=search:  |List music in the library or playlist. See '-p' option.." \
+                "-n|--no-prompt     |Do not prompt the user to select a video to download." \
+                "-p|--path=location:|Search in 'library' or 'playlist'. [Default: 'playlist']."
+                "-S|--sync          |Sync music library." \
+                "  |--uninstall     |Uninstall the Music Library." \
+                "-u|--unofficial    |Do not append 'official' to the Youtube search string." \
+                "-v|--verbose       |Verbose output."
     cli_parse "${@}"
 
     local help=$(cli_get "help")
@@ -82,32 +83,31 @@ main()
     local find=$(cli_get "find")
     local install=$(cli_get "install")
     local list=$(cli_get "list")
+    local path=$(cli_get "path")
     local sync=$(cli_get "sync")
     local uninstall=$(cli_get "uninstall")
 
     MUSIC_LIB_DRYRUN=$(cli_get "dry-run")
-    MUSIC_LIB_PROMPT=$(cli_get "prompt")
+    MUSIC_LIB_PROMPT=$(cli_get "no-prompt")
     MUSIC_LIB_UNOFFICIAL=$(cli_get "unofficial")
     MUSIC_LIB_VERBOSE=$(cli_get "verbose")
 
-    # Run options
     trap music_lib_cleanup EXIT
     if [ -n "${help}" ]
     then
         cli_usage
-        exit 0
     elif [ -n "${download}" ]
     then
         music_lib_download "${download}"
     elif [ -n "${find}" ]
     then
-        music_lib_find "${find}"
+        music_lib_find "${find}" "${path}"
     elif [ -n "${install}" ]
     then
         music_lib_install
     elif [ -n "${list}" ]
     then
-        list_music_library "${list}"
+        music_lib_list "${list}" "${path}"
     elif [ -n "${sync}" ]
     then
         music_lib_sync
@@ -117,121 +117,11 @@ main()
     else
         exit 1
     fi
+    exit $?
 }
-
-# ------------------------------------------------------------------------------
-# List music library
-list_music_library()
-{
-    local queries=("${@}")
-    local listall=false
-    local song=
-    local q=
-    local d=
-    local f=
-    local IFS=$'\n'
-
-    # Determine what to list: User input or all artists
-    if [ -z "${queries}" ]; then
-        queries=(*)
-        listall=true
-    fi
-
-    # List library
-    for q in "${queries[@]}"; do
-        builtin cd "${MUSIC_LIB_LIBRARY_DIR}"
-
-        # Check if artist dir and song file exist
-        if [ ! -d "${q}" ]; then
-            if ! ${listall} && [ ! -f "${q}" ]; then
-                print_err "Unable to list '${q}'."
-            fi
-            continue
-        fi
-
-        # Display all songs from artist
-        builtin cd "${q}"
-        echo "${q}"
-
-        for f in *; do
-            song=$(music_lib_get_song "${f}")
-            echo "    ${song}"
-        done
-
-        if [ "${q}" != "${queries[-1]}" ]; then
-            echo
-        fi
-    done
-}
-
-# ------------------------------------------------------------------------------
-# Return href from a line in the search result page
-get_search_result_href()
-{
-    echo "${1}" \
-        | grep -E -o 'href="/watch\?v=[^"]*' \
-        | head -n 1 \
-        | sed 's/href="//'
-}
-
-# ------------------------------------------------------------------------------
-# Return title from a line in the search result page
-get_search_result_title()
-{
-    echo "${1}" \
-        | grep -E -o 'title="[^"]*' \
-        | head -n 1 \
-        | sed 's/title="//; s/\&quot\;/"/g'
-}
-
-# ------------------------------------------------------------------------------
-# Print any discrepancies between the music library file and the library itself
-check_music_library()
-{
-    local artist=
-    local song=
-
-    while IFS= read -r line; do
-        if [ ! -n "${line}" ]; then
-            continue;
-        fi
-
-        artist=$(music_lib_get_artist "${line}")
-        song=$(music_lib_get_song "${line}")
-
-        # Check for existence of artist directory
-        if [ ! -d "${MUSIC_LIB_LIBRARY_DIR}/${artist}" ]; then
-            print_warn "Unable to find artist '${artist}' for song '${song}'."
-            continue
-        fi
-
-        # Check for existence of song file
-        if [ ! -f "${MUSIC_LIB_LIBRARY_DIR}/${artist}/${line}" -o ! -f "${MUSIC_LIB_LIBRARY_DIR}/${artist}/${song}" ]; then
-            print_warn "Unable to find song '${song}' for artist '${artist}'."
-            continue
-        fi
-
-        printf "%40s %40s %s\n" "'${artist}'" "'${song}'" "${line}"
-    done < "${MUSIC_LIB_LIBRARY_FILE}"
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ##
 # Download music.
-# 
-# To-do: Change the exits to returns?
 ##
 music_lib_download()
 {
@@ -244,41 +134,27 @@ music_lib_download()
     local sync="${2}"
     local artist=$(music_lib_get_artist "${download}")
     local song=$(music_lib_get_song "${download}")
-    if ! music_lib_is_artist "${artist}" && ! music_lib_is_song "${song}"
+    local status=0
+
+    music_lib_download_downloadable "${artist}" "${song}"
+    status=$?
+    if [ ${status} -ne 0 ]
     then
-        print_err "Could not determine artist and song name."
-        exit ${EXIT_MUSIC_LIB_SONG_NAME_NOT_FOUND}
-    elif music_lib_is_music "${artist}" "${song}"
-    then
-        if [ -n "${sync}" ]
-        then
-            return 1
-        fi
-        print_err "Music '${file}' already exists in your music library."
-        exit ${EXIT_MUSIC_LIB_MUSIC_NOT_FOUND}
-    else
-        echo "Artist : ${artist}"
-        echo "Song   : ${song}"
-    fi
-    if music_lib_is_dryrun
-    then
-        exit 0
+        return ${status}
     fi
 
-    builtin cd "${MUSIC_LIB_LIBRARY_DIR}"
-    if [ -n "${artist}" ]
+    music_lib_download_start "${download}" "${artist}" "${song}"
+    status=$?
+    if [ ${status} -ne 0 ]
     then
-        mkdir -pv "${artist}"
-        builtin cd "${artist}"
+        return ${status}
     fi
-
-    music_lib_download_search_page "${download}"
-    music_lib_download_save_results
-    music_lib_download_content "${artist}" "${song}"
 }
 
 ##
-# Find any artist or songs in the library that match the input search string.
+# Find any artist or songs that match the input string.
+# 
+# Searches occur in either the library or the playlist directory.
 ##
 music_lib_find()
 {
@@ -288,11 +164,12 @@ music_lib_find()
         exit ${EXIT_MUSIC_LIB_INVALID_FIND}
     fi
     local search="${1}"
+    local path="${2}"
     local artiststatus=0
     local songstatus=0
-    music_lib_find_matches "artist" "${search}"
+    music_lib_search "artist" "${search}" "${path}"
     artiststatus=$?
-    music_lib_find_matches "song" "${search}"
+    music_lib_search "song" "${search}" "${path}"
     songstatus=$?
     if [ ${artiststatus} -ne 0 -a ${songstatus} -ne 0 ]
     then
@@ -314,6 +191,28 @@ music_lib_install()
     music_lib_install_location "share"
     music_lib_install_location "playlist"
     music_lib_install_location "library"
+}
+
+
+##
+# List the songs that match the input string, where the input string corresponds
+# to either a playlist or artist.
+# 
+# Searches occur in either the library or the playlist directory. If searching
+# in the library directory, list the artist's songs. If searching in the
+# playlist directory, list the playlist's songs.
+##
+music_lib_list()
+{
+    if [ -z "${1}" ]
+    then
+        print_err "Must specify song or playlist to list."
+        exit ${EXIT_MUSIC_LIB_INVALID_FIND}
+    fi
+    local search="${1}"
+    local path=$(music_lib_get_path "${2}")
+    music_lib_search "list" "${search}" "${path}"
+    return $?
 }
 
 ##
@@ -341,12 +240,76 @@ music_lib_uninstall()
     music_lib_cleanup "uninstall"
 }
 
+##
+# Start download process.
+##
+music_lib_download_start()
+{
+    local download="${1}"
+    local artist="${2}"
+    local song="${3}"
+    local status=0
 
+    builtin cd "${MUSIC_LIB_LIBRARY_DIR}"
+    if [ -n "${artist}" ]
+    then
+        mkdir -pv "${artist}"
+        builtin cd "${artist}"
+    fi
 
+    music_lib_download_search_page "${download}"
+    status=$?
+    if [ ${status} -ne 0 ]
+    then
+        return ${status}
+    fi
 
+    music_lib_download_save_results
+    status=$?
+    if [ ${status} -ne 0 ]
+    then
+        return ${status}
+    fi
 
+    music_lib_download_content "${artist}" "${song}"
+    status=$?
+    if [ ${status} -ne 0 ]
+    then
+        return ${status}
+    fi
+}
 
+##
+# Check if song is downloadable.
+##
+music_lib_download_downloadable()
+{
+    local artist="${1}"
+    local song="${2}"
+    if ! music_lib_is_artist "${artist}" && ! music_lib_is_song "${song}"
+    then
+        print_err "Could not determine artist and song name."
+        return ${EXIT_MUSIC_LIB_SONG_NAME_NOT_FOUND}
+    elif music_lib_is_music "${artist}" "${song}"
+    then
+        if [ -n "${sync}" ]
+        then
+            return 1
+        fi
+        print_err "Music '${file}' already exists in your music library."
+        return ${EXIT_MUSIC_LIB_MUSIC_NOT_FOUND}
+    else
+        echo "Artist : ${artist}"
+        echo "Song   : ${song}"
+    fi
 
+    if music_lib_is_dryrun
+    then
+        return 1
+    else
+        return 0
+    fi
+}
 
 ##
 # Download content to the music library.
@@ -401,11 +364,11 @@ music_lib_download_save_results()
     : > "${MUSIC_LIB_RESULTS_FILE}"
     for line in $(grep 'href="/watch?v=' "${MUSIC_LIB_RESULTS_SITE}" | grep 'title=')
     do
-        local ref=$(get_search_result_href "${line}")
+        local ref=$(music_lib_download_get_href "${line}")
         local title=
         if [ "${ref/list=}" == "${ref}" ]
         then
-            title=$(get_search_result_title "${line}")
+            title=$(music_lib_download_get_title "${line}")
             i=$[ ${i} + 1 ]
             echo "${ref};${title}" >> "${MUSIC_LIB_RESULTS_FILE}"
             if ! music_lib_is_prompt || [ ${i} -eq 10 ]
@@ -457,18 +420,20 @@ music_lib_download_prompt()
 }
 
 ##
-# Find artists and songs matching the input search string.
+# Search for artists or songs matching the input string.
 ##
-music_lib_find_matches()
+music_lib_search()
 {
     local type="${1}"
     local search="${2}"
+    local path=$(music_lib_get_path "${3}")
     local matches=()
     local m=
     local IFS=$'\n'
-    builtin cd "${MUSIC_LIB_LIBRARY_DIR}"
+    builtin cd "${path}"
+
     case "${type}" in
-        artist)
+        artist|list)
             matches=($(find . -iname "*${search}*" -type d -printf "%f\n"))
             ;;
         song)
@@ -483,11 +448,21 @@ music_lib_find_matches()
     then
         return ${EXIT_MUSIC_LIB_FIND_EMPTY}
     fi
-    echo "${type^}s:"
-    for m in "${matches[@]}"
-    do
-        echo "    * ${m}"
-    done
+
+    if [ "${type}" == "list" ]
+    then
+        for m in "${matches[@]}"
+        do
+            echo "${m}:"
+            printf "    %s\n" $(ls -1 "${m}/")
+        done
+    else
+        echo "${type^}s:"
+        for m in "${matches[@]}"
+        do
+            echo "    * ${m}"
+        done
+    fi
 }
 
 ##
@@ -569,6 +544,26 @@ music_lib_download_get_result()
     return $?
 }
 
+# ------------------------------------------------------------------------------
+# Return href from a line in the search result page
+music_lib_download_get_href()
+{
+    echo "${1}" \
+        | grep -E -o 'href="/watch\?v=[^"]*' \
+        | head -n 1 \
+        | sed 's/href="//'
+}
+
+# ------------------------------------------------------------------------------
+# Return title from a line in the search result page
+music_lib_download_get_title()
+{
+    echo "${1}" \
+        | grep -E -o 'title="[^"]*' \
+        | head -n 1 \
+        | sed 's/title="//; s/\&quot\;/"/g'
+}
+
 ##
 # Return the URL to the content.
 ##
@@ -619,6 +614,21 @@ music_lib_get_song()
 }
 
 ##
+# Return the path to the playlist or library directory.
+##
+music_lib_get_path()
+{
+    local input="${1}"
+    local path=
+    case "${1}" in
+        library) path="${MUSIC_LIB_LIBRARY_DIR}" ;;
+        playlist) path="${MUSIC_LIB_PLAYLIST_DIR}" ;;
+        *) path="${MUSIC_LIB_PLAYLIST_DIR}" ;;
+    esac
+    echo "${path}"
+}
+
+##
 # Check if current run of the script is a dry-run.
 ##
 music_lib_is_dryrun()
@@ -663,7 +673,8 @@ music_lib_is_official()
 music_lib_is_artist()
 {
     local artist="${1}"
-    if [ -n "${artist}" ]; then
+    if [ -n "${artist}" ]
+    then
         return 0
     else
         return 1
@@ -676,7 +687,8 @@ music_lib_is_artist()
 music_lib_is_song()
 {
     local song="${1}"
-    if [ -n "${song}" ]; then
+    if [ -n "${song}" ]
+    then
         return 0
     else
         return 1
