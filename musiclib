@@ -96,26 +96,33 @@ main()
     if [ -n "${help}" ]
     then
         cli_usage
-    elif [ -n "${download}" ]
-    then
-        music_lib_download "${download}"
-    elif [ -n "${find}" ]
-    then
-        music_lib_find "${find}" "${path}"
     elif [ -n "${install}" ]
     then
         music_lib_install
-    elif [ -n "${list}" ]
-    then
-        music_lib_list "${list}" "${path}"
-    elif [ -n "${sync}" ]
-    then
-        music_lib_sync
-    elif [ -n "${uninstall}" ]
-    then
-        music_lib_uninstall
     else
-        exit 1
+        if [ ! -d "${MUSIC_LIB_SHARE_DIR}" ]
+        then
+            print_err "Music Library share directory has not been installed yet. See '--install'."
+            exit ${MUSIC_LIB_SHARE_DIR_NOT_FOUND}
+        fi
+        if [ -n "${download}" ]
+        then
+            music_lib_download "${download}"
+        elif [ -n "${find}" ]
+        then
+            music_lib_find "${find}" "${path}"
+        elif [ -n "${list}" ]
+        then
+            music_lib_list "${list}" "${path}"
+        elif [ -n "${sync}" ]
+        then
+            music_lib_sync
+        elif [ -n "${uninstall}" ]
+        then
+            music_lib_uninstall
+        else
+            exit 1
+        fi
     fi
     exit $?
 }
