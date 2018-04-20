@@ -22,8 +22,8 @@ To sync the Music Library with the your *library.txt* file, run:
 musiclib --sync
 ```
 
-Click [here](#directory-and-file-structure) for more information on the
-*library.txt* file.
+See [Directory and File Structure](#directory-and-file-structure) for more
+information on the *library.txt* file.
 
 ## Uninstall
 
@@ -35,13 +35,17 @@ musiclib --uninstall
 
 ## Directory and File Structure
 
-The user is prompted as to where the Playlist and Library directories are
-located.
+When running [Install](#install), the user is prompted as to where the Playlist
+and Library directories are located.
 
 Within the Library directory, there should be a file called *library.txt* which
-contains a list of songs that should be in the library.  These songs must be
-named in the following format:
+contains a list of songs that should be in the library.
+
+The songs have a specific naming format of:
 
 ```
-<artist> - <song name>.mp3
+<artist> - <song name>
 ```
+
+So each line in the *library.txt* file should coincide with this. When running
+[Sync](#sync), the files are named with a *.mp3* extension.
